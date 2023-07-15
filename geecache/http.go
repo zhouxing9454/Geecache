@@ -1,19 +1,29 @@
 package geecache
 
 import (
+	"Geecache/geecache/consistenthash"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
+	"sync"
 )
 
-const defaultBasePath = "/_geecache/"
+const (
+	defaultBasePath = "/_geecache/"
+	defaultReplicas = 50
+)
 
 type HTTPPool struct {
 	self     string //用来记录自己的地址，包括主机名/IP 和端口
 	basePath string
 	//作为节点间通讯地址的前缀，默认是 /_geecache/，那么 http://example.com/_geecache/ 开头的请求，就用于节点间的访问。
 	// 因为一个主机上还可能承载其他的服务，加一段 Path 是一个好习惯。比如，大部分网站的 API 接口，一般以 /api 作为前缀
+	mu          sync.Mutex
+	peers       *consistenthash.Map    //新增成员变量 peers，类型是一致性哈希算法的 Map，用来根据具体的 key 选择节点。
+	httpGetters map[string]*httpGetter //新增成员变量 httpGetters，映射远程节点与对应的 httpGetter。每一个远程节点对应一个 httpGetter，因为 httpGetter 与远程节点的地址 baseURL 有关。
 }
 
 func NewHTTPPool(self string) *HTTPPool {
@@ -57,3 +67,55 @@ func (p *HTTPPool) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/octet-stream") //表示未知类型或未指定类型的二进制数据流
 	w.Write(view.ByteSlice())
 }
+
+type httpGetter struct {
+	baseURL string //表示将要访问的远程节点的地址
+}
+
+func (h *httpGetter) Get(group string, key string) ([]byte, error) {
+	u := fmt.Sprintf(
+		"%v%v%v",
+		h.baseURL,
+		url.QueryEscape(group),
+		url.QueryEscape(key),
+	) //使用 fmt.Sprintf 函数将 h.baseURL、经过 URL 编码的 group 和经过 URL 编码的 key 拼接成一个完整的 URL
+	res, err := http.Get(u)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server returned: %v", res.Status)
+	}
+	bytes, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading response body: %v", err)
+	}
+	return bytes, nil
+}
+
+var _ PeerGetter = (*httpGetter)(nil) //这行代码用于进行静态类型检查，确保 httpGetter 类型确实实现了 PeerGetter 接口
+
+func (p *HTTPPool) Set(peers ...string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.peers = consistenthash.New(defaultReplicas, nil)
+	p.peers.Add(peers...)
+	p.httpGetters = make(map[string]*httpGetter, len(peers))
+	for _, peer := range peers {
+		p.httpGetters[peer] = &httpGetter{baseURL: peer + p.basePath}
+	}
+} //Set() 方法实例化了一致性哈希算法，并且添加了传入的节点。 并为每一个节点创建了一个 HTTP 客户端 httpGetter。
+
+func (p *HTTPPool) PickPeer(key string) (PeerGetter, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if peer := p.peers.Get(key); peer != "" && peer != p.self {
+		p.Log("Pick peer %s", peer)
+		return p.httpGetters[peer], true
+	}
+	return nil, false
+} //PickerPeer() 包装了一致性哈希算法的 Get() 方法，根据具体的 key，选择节点，返回节点对应的 HTTP 客户端。
+
+var _ PeerPicker = (*HTTPPool)(nil) //这行代码用于进行静态类型检查，确保 HTTPPool 类型确实实现了 PeerPicker 接口

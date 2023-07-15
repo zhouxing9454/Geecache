@@ -17,9 +17,10 @@ func (f GetterFunc) Get(key string) ([]byte, error) { //函数类型实现某一
 }
 
 type Group struct {
-	name      string
-	getter    Getter
-	mainCache cache
+	name      string     //缓存组的名称。
+	getter    Getter     //实现了 Getter 接口的对象，用于获取缓存数据。
+	mainCache cache      // 主缓存，是一个 cache 类型的实例，用于存储缓存数据。
+	peers     PeerPicker //实现了 PeerPicker 接口的对象，用于根据键选择对等节点
 }
 
 var (
@@ -61,8 +62,16 @@ func (g *Group) Get(key string) (ByteView, error) {
 }
 
 func (g *Group) load(key string) (value ByteView, err error) {
+	if g.peers != nil {
+		if peer, ok := g.peers.PickPeer(key); ok {
+			if value, err = g.getFromPeer(peer, key); err == nil {
+				return value, nil
+			}
+		}
+		log.Println("[GeeCache] Failed to get from peer", err)
+	}
 	return g.getLocally(key)
-}
+} //使用 PickPeer() 方法选择节点，若非本机节点，则调用 getFromPeer() 从远程获取。若是本机节点或失败，则回退到 getLocally()。
 
 func (g *Group) getLocally(key string) (ByteView, error) {
 	bytes, err := g.getter.Get(key)
@@ -77,3 +86,18 @@ func (g *Group) getLocally(key string) (ByteView, error) {
 func (g *Group) populateCache(key string, value ByteView) {
 	g.mainCache.add(key, value)
 }
+
+func (g *Group) RegisterPeers(peers PeerPicker) {
+	if g.peers != nil {
+		panic("RegisterPeerPicker called more than once")
+	}
+	g.peers = peers
+} //将实现了 PeerPicker 接口的 HTTPPool 注入到 Group 中
+
+func (g *Group) getFromPeer(peer PeerGetter, key string) (ByteView, error) {
+	bytes, err := peer.Get(g.name, key)
+	if err != nil {
+		return ByteView{}, err
+	}
+	return ByteView{b: bytes}, nil
+} //实现了 PeerGetter 接口的 httpGetter 从访问远程节点，获取缓存值。
