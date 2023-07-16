@@ -70,7 +70,7 @@ func main() {
 	if api {
 		go startAPIServer(apiAddr, gee)
 	}
-	startCacheServer(addrMap[port], []string(addrs), gee)
+	startCacheServer(addrMap[port], addrs, gee)
 }
 
 //startCacheServer() 用来启动缓存服务器：创建 HTTPPool，添加节点信息，注册到 gee 中，启动 HTTP 服务（共3个端口，8001/8002/8003），用户不感知。
