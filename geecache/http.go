@@ -2,7 +2,9 @@ package geecache
 
 import (
 	"Geecache/geecache/consistenthash"
+	pb "Geecache/geecache/geecachepb"
 	"fmt"
+	"google.golang.org/protobuf/proto"
 	"io"
 	"log"
 	"net/http"
@@ -64,35 +66,43 @@ func (p *HTTPPool) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	body, err := proto.Marshal(&pb.Response{Value: view.ByteSlice()})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/octet-stream") //表示未知类型或未指定类型的二进制数据流
-	w.Write(view.ByteSlice())
+	w.Write(body)
 }
 
 type httpGetter struct {
 	baseURL string //表示将要访问的远程节点的地址
 }
 
-func (h *httpGetter) Get(group string, key string) ([]byte, error) {
+func (h *httpGetter) Get(in *pb.Request, out *pb.Response) error {
 	u := fmt.Sprintf(
 		"%v%v%v",
 		h.baseURL,
-		url.QueryEscape(group),
-		url.QueryEscape(key),
+		url.QueryEscape(in.GetGroup()),
+		url.QueryEscape(in.GetKey()),
 	) //使用 fmt.Sprintf 函数将 h.baseURL、经过 URL 编码的 group 和经过 URL 编码的 key 拼接成一个完整的 URL
 	res, err := http.Get(u)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server returned: %v", res.Status)
+		return fmt.Errorf("server returned: %v", res.Status)
 	}
 	bytes, err := io.ReadAll(res.Body)
 	if err != nil {
-		return nil, fmt.Errorf("reading response body: %v", err)
+		return fmt.Errorf("reading response body: %v", err)
 	}
-	return bytes, nil
+	if err = proto.Unmarshal(bytes, out); err != nil {
+		return fmt.Errorf("decoding response body:%v", err)
+	}
+	return nil
 }
 
 var _ PeerGetter = (*httpGetter)(nil) //这行代码用于进行静态类型检查，确保 httpGetter 类型确实实现了 PeerGetter 接口
