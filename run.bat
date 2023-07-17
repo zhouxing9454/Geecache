@@ -1,4 +1,4 @@
-REM 删除之前生成的服务器可执行文件
+
 del server.exe
 
 
