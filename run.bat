@@ -1,4 +1,4 @@
-
+REM 删除之前生成的服务器可执行文件
 del server.exe
 
 
@@ -14,6 +14,17 @@ ping -n 2 127.0.0.1 > nul
 
 
 echo ">>> start test"
-curl "http://localhost:9999/api?key=Tom"
-curl "http://localhost:9999/api?key=Tom"
-curl "http://localhost:9999/api?key=Tom"
+
+
+start /B curl "http://localhost:9999/api?key=Tom"
+start /B curl "http://localhost:9999/api?key=Tom"
+start /B curl "http://localhost:9999/api?key=Tom"
+start /B curl "http://localhost:9999/api?key=Tom"
+start /B curl "http://localhost:9999/api?key=Tom"
+start /B curl "http://localhost:9999/api?key=Tom"
+
+
+ping -n 10 127.0.0.1 > nul
+
+
+echo ">>> test finished"
