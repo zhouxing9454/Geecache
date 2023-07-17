@@ -397,9 +397,9 @@ service GroupCache {
 
 ### 结构目录
 
-```apl
+```tex
 │  go.mod
-│  main.go
+│  main.go 主函数
 │  run.sh
 └─geecache
     │  byteview.go 缓存值的抽象与封装
@@ -425,4 +425,17 @@ service GroupCache {
             singleflight.go 防止缓存击穿
             singleflight_test.go
 ```
+
+
+
+
+
+### 项目愿景
+
+- [ ] 将单独 lru 算法实现改成多种算法可选
+- [ ] 将 http 通信改为 rpc 通信提⾼⽹络通信效率
+- [ ] 细化锁的粒度来提⾼并发性能
+- [ ] 实现热点互备来避免 hot key 频繁请求⽹络影响性能
+- [ ]  加⼊ etcd 进⾏分布式节点的监测实现节点的动态管理
+- [ ] 加⼊缓存过期机制，⾃动清理超时缓存 
 

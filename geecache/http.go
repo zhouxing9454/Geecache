@@ -81,7 +81,7 @@ type httpGetter struct {
 
 func (h *httpGetter) Get(in *pb.Request, out *pb.Response) error {
 	u := fmt.Sprintf(
-		"%v%v%v",
+		"%v%v/%v",
 		h.baseURL,
 		url.QueryEscape(in.GetGroup()),
 		url.QueryEscape(in.GetKey()),
