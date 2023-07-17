@@ -20,11 +20,11 @@ func (f GetterFunc) Get(key string) ([]byte, error) { //函数类型实现某一
 
 type Group struct {
 	name      string              //缓存组的名称。
-	getter    Getter              //实现了 Getter 接口的对象，用于获取缓存数据。
+	getter    Getter              //实现了 Getter 接口的对象（回调），从数据源用于获取缓存数据。
 	mainCache cache               // 主缓存，是一个 cache 类型的实例，用于存储缓存数据。
 	peers     PeerPicker          //实现了 PeerPicker 接口的对象，用于根据键选择对等节点
 	loader    *singleflight.Group //确保相同的请求只被执行一次
-}
+} //负责与用户的交互，并且控制缓存值存储和获取的流程。
 
 var (
 	mu     sync.RWMutex
@@ -102,7 +102,9 @@ func (g *Group) RegisterPeers(peers PeerPicker) {
 		panic("RegisterPeerPicker called more than once")
 	}
 	g.peers = peers
-} //将实现了 PeerPicker 接口的 HTTPPool 注入到 Group 中
+} //将实现了 PeerPicker 接口的 HTTPPool 注入到 Group 中，
+// 调用 RegisterPeers 函数，我们可以将实现了 PeerPicker 接口的对象注册到 Group 结构体中。
+//这样，在分布式缓存系统的运行过程中，当需要根据键选择远程节点时，可以通过调用 g.peers.PickPeer(key) 来获取合适的远程节点的 PeerGetter 对象。
 
 func (g *Group) getFromPeer(peer PeerGetter, key string) (ByteView, error) {
 	req := &pb.Request{

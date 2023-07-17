@@ -12,7 +12,7 @@ import (
 type cache struct {
 	mu         sync.Mutex
 	lru        *lru.Cache
-	cacheBytes int64
+	cacheBytes int64 //lru的maxBytes
 }
 
 func (c *cache) add(key string, value ByteView) {
