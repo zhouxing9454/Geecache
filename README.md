@@ -390,3 +390,39 @@ service GroupCache {
 ```
 
 命令：`protoc --go_out=. geecache/geecachepb/geecachepb.proto`
+
+
+
+
+
+### 结构目录
+
+```apl
+│  go.mod
+│  main.go
+│  run.sh
+└─geecache
+    │  byteview.go 缓存值的抽象与封装
+    │  cache.go 并发控制
+    │  geecache.go  负责与外部交互，控制缓存存储和获取的主流程
+    │  geecache_test.go
+    │  http.go 节点间 HTTP 通信
+    │  peers.go 节点对应的客户端
+    │
+    ├─consistenthash
+    │      consistenthash.go 一致性哈希算法
+    │      consistenthash_test.go
+    │
+    ├─geecachepb
+    │      geecachepb.pb.go
+    │      geecachepb.proto protobuf通信
+    │
+    ├─lru
+    │      lru.go lru内存淘汰算法
+    │      lru_test.go
+    │
+    └─singleflight
+            singleflight.go 防止缓存击穿
+            singleflight_test.go
+```
+
