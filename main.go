@@ -15,7 +15,7 @@ var db = map[string]string{
 }
 
 func createGroup() *geecache.Group {
-	return geecache.NewGroup("scores", 2<<10, geecache.GetterFunc(
+	return geecache.NewGroup("scores", 2<<10, "lru", geecache.GetterFunc( //lru算法做测试
 		func(key string) ([]byte, error) {
 			log.Println("[SlowDB] Search key", key)
 			if v, ok := db[key]; ok {

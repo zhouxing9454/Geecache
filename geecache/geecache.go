@@ -21,7 +21,7 @@ func (f GetterFunc) Get(key string) ([]byte, error) { //函数类型实现某一
 type Group struct {
 	name      string              //缓存组的名称。
 	getter    Getter              //实现了 Getter 接口的对象（回调），从数据源用于获取缓存数据。
-	mainCache cache               // 主缓存，是一个 cache 类型的实例，用于存储缓存数据。
+	mainCache BaseCache           // 主缓存，是一个 cache 类型的实例，用于存储缓存数据。——修改为BaseCache,一个缓存接口
 	peers     PeerPicker          //实现了 PeerPicker 接口的对象，用于根据键选择对等节点
 	loader    *singleflight.Group //确保相同的请求只被执行一次
 } //负责与用户的交互，并且控制缓存值存储和获取的流程。
@@ -31,17 +31,24 @@ var (
 	groups = make(map[string]*Group)
 )
 
-func NewGroup(name string, cacheBytes int64, getter Getter) *Group {
+func NewGroup(name string, cacheBytes int64, CacheType string, getter Getter) *Group { //增加CacheType,用来选择具体缓存淘汰算法
 	if getter == nil {
 		panic("nil Getter")
 	}
 	mu.Lock()
 	defer mu.Unlock()
 	g := &Group{
-		name:      name,
-		getter:    getter,
-		mainCache: cache{cacheBytes: cacheBytes},
-		loader:    &singleflight.Group{},
+		name:   name,
+		getter: getter,
+		loader: &singleflight.Group{},
+	}
+	switch CacheType { //根据淘汰算法，实例化mainCache
+	case "lru":
+		g.mainCache = &LRUcache{cacheBytes: cacheBytes}
+	case "lfu":
+		g.mainCache = &LFUcache{cacheBytes: cacheBytes}
+	default:
+		panic("Please select the correct algorithm!")
 	}
 	groups[name] = g
 	return g

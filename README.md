@@ -432,10 +432,119 @@ service GroupCache {
 
 ### 项目愿景
 
-- [ ] 将单独 lru 算法实现改成多种算法可选
+- [x] 将单独 lru 算法实现改成多种算法可选
 - [ ] 将 http 通信改为 rpc 通信提⾼⽹络通信效率
 - [ ] 细化锁的粒度来提⾼并发性能
 - [ ] 实现热点互备来避免 hot key 频繁请求⽹络影响性能
 - [ ]  加⼊ etcd 进⾏分布式节点的监测实现节点的动态管理
 - [ ] 加⼊缓存过期机制，⾃动清理超时缓存 
 
+
+
+
+
+### 项目改进
+
+#### 1.实现lfu算法和lru算法两种缓存淘汰策略。
+
+先创建lfu目录，实现lfu算法和test文件。部分结构体如下：
+
+```go
+type LFUCache struct {
+	maxBytes int64 // 最大存储容量
+	nBytes   int64 // 已占用的容量
+	// 使用一个 heap 来管理缓存项，heap 中的元素按照频率排序
+	// heap 实现了一个最小堆，即堆顶元素是最小值
+	heap      *entryHeap
+	cache     map[string]*entry             // map，键是字符串，值是堆中对应节点的指针
+	OnEvicted func(key string, value Value) // OnEvicted 是某条记录被移除时的回调函数，可以为 nil
+}
+```
+
+然后cache.go文件下，创建一个接口Basecache，实现add和get方法。同时创建一个并发的LFUcache
+
+```go
+// BaseCache 是一个接口，定义了基本的缓存操作方法。它包含了两个方法：add 和 get，用于向缓存中添加数据和从缓存中获取数据。
+type BaseCache interface {
+	add(key string, value ByteView)
+	get(key string) (value ByteView, ok bool)
+}
+
+type LFUcache struct {
+	mu         sync.Mutex
+	lfu        *lfu.LFUCache
+	cacheBytes int64 //lru的maxBytes
+}
+
+func (c *LFUcache) add(key string, value ByteView) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.lfu == nil {
+		c.lfu = lfu.New(c.cacheBytes, nil)
+	}
+	c.lfu.Add(key, value)
+}
+
+func (c *LFUcache) get(key string) (value ByteView, ok bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.lfu == nil {
+		return
+	}
+	if v, ok := c.lfu.Get(key); ok {
+		return v.(ByteView), ok
+	}
+	return
+}
+```
+
+最后再geecache.go文件中将group结构体和newgroup方法修改为如下：
+
+```go
+type Group struct {
+	name      string              //缓存组的名称。
+	getter    Getter              //实现了 Getter 接口的对象（回调），从数据源用于获取缓存数据。
+	mainCache BaseCache           // 主缓存，是一个 cache 类型的实例，用于存储缓存数据。——修改为BaseCache,一个缓存接口
+	peers     PeerPicker          //实现了 PeerPicker 接口的对象，用于根据键选择对等节点
+	loader    *singleflight.Group //确保相同的请求只被执行一次
+} //负责与用户的交互，并且控制缓存值存储和获取的流程。
+
+
+func NewGroup(name string, cacheBytes int64, CacheType string, getter Getter) *Group { //增加CacheType,用来选择具体缓存淘汰算法
+	if getter == nil {
+		panic("nil Getter")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	g := &Group{
+		name:   name,
+		getter: getter,
+		loader: &singleflight.Group{},
+	}
+	switch CacheType { //根据淘汰算法，实例化mainCache
+	case "lru":
+		g.mainCache = &LRUcache{cacheBytes: cacheBytes}
+	case "lfu":
+		g.mainCache = &LFUcache{cacheBytes: cacheBytes}
+	default:
+		panic("Please select the correct algorithm!")
+	}
+	groups[name] = g
+	return g
+}
+```
+
+你可以在主函数中的createGroup函数测试你想要测试的算法。
+
+```go
+func createGroup() *geecache.Group {
+	return geecache.NewGroup("scores", 2<<10, "lru", geecache.GetterFunc( //lru算法做测试
+		func(key string) ([]byte, error) {
+			log.Println("[SlowDB] Search key", key)
+			if v, ok := db[key]; ok {
+				return []byte(v), nil
+			}
+			return nil, fmt.Errorf("%s not exist", key)
+		}))
+}
+```
