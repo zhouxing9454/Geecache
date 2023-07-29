@@ -435,7 +435,6 @@ service GroupCache {
 - [ ] 将 http 通信改为 rpc 通信提⾼⽹络通信效率
 - [ ] 细化锁的粒度来提⾼并发性能
 - [ ] 加⼊ etcd 进⾏分布式节点的监测实现节点的动态管理
-- [ ] 加⼊缓存过期机制，⾃动清理超时缓存 
 
 
 
@@ -588,3 +587,54 @@ func (g *Group) Get(key string) (ByteView, error) {
 }
 ```
 
+
+
+#### 3.设置ttl和惰性删除
+
+这里我们只举lru，实际上lfu也实现了。
+
+```go
+type LRUCache struct {
+	maxBytes   int64                         // 最大存储容量
+	nBytes     int64                         // 已占用的容量
+	ll         *list.List                    //直接使用 Go 语言标准库实现的双向链表list.List
+	cache      map[string]*list.Element      //map,键是字符串，值是双向链表中对应节点的指针
+	OnEvicted  func(key string, value Value) //OnEvicted 是某条记录被移除时的回调函数，可以为 nil
+	defaultTTL time.Duration
+} // Cache is a LRU cache. It is not safe for concurrent access.
+
+type entry struct {
+	key    string
+	value  Value
+	expire time.Time
+} // 键值对 entry 是双向链表节点的数据类型，在链表中仍保存每个值对应的 key 的好处在于，淘汰队首节点时，需要用 key 从字典中删除对应的映射。
+```
+
+我们默认设置的10秒过期
+
+```go
+func NewGroup(name string, cacheBytes int64, CacheType string, getter Getter) *Group { //增加CacheType,用来选择具体缓存淘汰算法
+	if getter == nil {
+		panic("nil Getter")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	g := &Group{
+		name:   name,
+		getter: getter,
+		loader: &singleflight.Group{},
+	}
+	switch CacheType { //根据淘汰算法，实例化mainCache
+	case "lru":
+		g.mainCache = &LRUcache{cacheBytes: cacheBytes, ttl: time.Second * 10}
+		g.hotCache = &LRUcache{cacheBytes: cacheBytes / 8, ttl: time.Second * 10}
+	case "lfu":
+		g.mainCache = &LFUcache{cacheBytes: cacheBytes, ttl: time.Second * 10}
+		g.hotCache = &LFUcache{cacheBytes: cacheBytes / 8, ttl: time.Second * 10}
+	default:
+		panic("Please select the correct algorithm!")
+	}
+	groups[name] = g
+	return g
+}
+```
