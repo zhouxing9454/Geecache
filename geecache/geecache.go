@@ -5,6 +5,7 @@ import (
 	"Geecache/geecache/singleflight"
 	"fmt"
 	"log"
+	"math/rand"
 	"sync"
 )
 
@@ -22,6 +23,7 @@ type Group struct {
 	name      string              //缓存组的名称。
 	getter    Getter              //实现了 Getter 接口的对象（回调），从数据源用于获取缓存数据。
 	mainCache BaseCache           // 主缓存，是一个 cache 类型的实例，用于存储缓存数据。——修改为BaseCache,一个缓存接口
+	hotCache  BaseCache           //mainCache 用于存储本地节点作为主节点所拥有的数据，而 hotCache 则是为了存储热门数据的缓存。
 	peers     PeerPicker          //实现了 PeerPicker 接口的对象，用于根据键选择对等节点
 	loader    *singleflight.Group //确保相同的请求只被执行一次
 } //负责与用户的交互，并且控制缓存值存储和获取的流程。
@@ -45,8 +47,10 @@ func NewGroup(name string, cacheBytes int64, CacheType string, getter Getter) *G
 	switch CacheType { //根据淘汰算法，实例化mainCache
 	case "lru":
 		g.mainCache = &LRUcache{cacheBytes: cacheBytes}
+		g.hotCache = &LRUcache{cacheBytes: cacheBytes / 8}
 	case "lfu":
 		g.mainCache = &LFUcache{cacheBytes: cacheBytes}
+		g.hotCache = &LFUcache{cacheBytes: cacheBytes / 8}
 	default:
 		panic("Please select the correct algorithm!")
 	}
@@ -65,8 +69,15 @@ func (g *Group) Get(key string) (ByteView, error) {
 	if key == "" {
 		return ByteView{}, fmt.Errorf("key is required")
 	}
+	if v, ok := g.hotCache.get(key); ok {
+		log.Println("[GeeCache] hit hotCache")
+		return v, nil
+	}
 	if v, ok := g.mainCache.get(key); ok {
-		log.Println("[GeeCache] hit")
+		log.Println("[GeeCache] hit mainCache")
+		if rand.Intn(10) == 0 {
+			g.populateHotCache(key, v)
+		}
 		return v, nil
 	}
 	return g.load(key)
@@ -102,6 +113,13 @@ func (g *Group) getLocally(key string) (ByteView, error) {
 
 func (g *Group) populateCache(key string, value ByteView) {
 	g.mainCache.add(key, value)
+}
+
+func (g *Group) populateHotCache(key string, value ByteView) {
+	if g.hotCache != nil {
+		// Add the data to hotCache
+		g.hotCache.add(key, value)
+	}
 }
 
 func (g *Group) RegisterPeers(peers PeerPicker) {

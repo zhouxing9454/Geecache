@@ -26,5 +26,16 @@ start /B curl "http://localhost:9999/api?key=Tom"
 
 ping -n 10 127.0.0.1 > nul
 
+timeout /t 5
+
+start /B curl "http://localhost:9999/api?key=Tom"
+start /B curl "http://localhost:9999/api?key=Tom"
+start /B curl "http://localhost:9999/api?key=Tom"
+start /B curl "http://localhost:9999/api?key=Tom"
+start /B curl "http://localhost:9999/api?key=Tom"
+start /B curl "http://localhost:9999/api?key=Tom"
+
+
+ping -n 10 127.0.0.1 > nul
 
 echo ">>> test finished"
