@@ -432,11 +432,9 @@ service GroupCache {
 
 ### 项目愿景
 
-- [x] 将单独 lru 算法实现改成多种算法可选
 - [ ] 将 http 通信改为 rpc 通信提⾼⽹络通信效率
 - [ ] 细化锁的粒度来提⾼并发性能
-- [ ] 实现热点互备来避免 hot key 频繁请求⽹络影响性能
-- [ ]  加⼊ etcd 进⾏分布式节点的监测实现节点的动态管理
+- [ ] 加⼊ etcd 进⾏分布式节点的监测实现节点的动态管理
 - [ ] 加⼊缓存过期机制，⾃动清理超时缓存 
 
 
@@ -548,3 +546,45 @@ func createGroup() *geecache.Group {
 		}))
 }
 ```
+
+
+
+
+
+#### 2.加入热点缓存hotCache
+
+在group结构体中加入hotCache字段
+
+```go
+type Group struct {
+	name      string              //缓存组的名称。
+	getter    Getter              //实现了 Getter 接口的对象（回调），从数据源用于获取缓存数据。
+	mainCache BaseCache           // 主缓存，是一个 cache 类型的实例，用于存储缓存数据。——修改为BaseCache,一个缓存接口
+	hotCache  BaseCache           //mainCache 用于存储本地节点作为主节点所拥有的数据，而 hotCache 则是为了存储热门数据的缓存。
+	peers     PeerPicker          //实现了 PeerPicker 接口的对象，用于根据键选择对等节点
+	loader    *singleflight.Group //确保相同的请求只被执行一次
+} //负责与用户的交互，并且控制缓存值存储和获取的流程。
+```
+
+修改newgroup，hotCache的最大容量是mainCache的八分之一。然后修改get方法。
+
+```go
+func (g *Group) Get(key string) (ByteView, error) {
+	if key == "" {
+		return ByteView{}, fmt.Errorf("key is required")
+	}
+	if v, ok := g.hotCache.get(key); ok {
+		log.Println("[GeeCache] hit hotCache")
+		return v, nil
+	}
+	if v, ok := g.mainCache.get(key); ok {
+		log.Println("[GeeCache] hit mainCache")
+		if rand.Intn(10) == 0 {
+			g.populateHotCache(key, v)
+		}
+		return v, nil
+	}
+	return g.load(key)
+}
+```
+
