@@ -18,7 +18,7 @@ type BaseCache interface {
 // 这种方法称之为延迟初始化(Lazy Initialization)，一个对象的延迟初始化意味着该对象的创建将会延迟至第一次使用该对象时。
 // 主要用于提高性能，并减少程序内存要求。
 type LRUcache struct {
-	mu         sync.Mutex
+	mu         sync.RWMutex
 	lru        *lru.LRUCache
 	cacheBytes int64 //lru的maxBytes
 	ttl        time.Duration
@@ -34,8 +34,8 @@ func (c *LRUcache) add(key string, value ByteView) {
 }
 
 func (c *LRUcache) get(key string) (value ByteView, ok bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	if c.lru == nil {
 		return
 	}
@@ -47,7 +47,7 @@ func (c *LRUcache) get(key string) (value ByteView, ok bool) {
 
 // LFUcache 同理于LRUcache
 type LFUcache struct {
-	mu         sync.Mutex
+	mu         sync.RWMutex
 	lfu        *lfu.LFUCache
 	cacheBytes int64 //lru的maxBytes
 	ttl        time.Duration
@@ -63,8 +63,8 @@ func (c *LFUcache) add(key string, value ByteView) {
 }
 
 func (c *LFUcache) get(key string) (value ByteView, ok bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	if c.lfu == nil {
 		return
 	}
