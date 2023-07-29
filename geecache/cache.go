@@ -4,6 +4,7 @@ import (
 	"Geecache/geecache/lfu"
 	"Geecache/geecache/lru"
 	"sync"
+	"time"
 )
 
 // BaseCache 是一个接口，定义了基本的缓存操作方法。它包含了两个方法：add 和 get，用于向缓存中添加数据和从缓存中获取数据。
@@ -20,15 +21,16 @@ type LRUcache struct {
 	mu         sync.Mutex
 	lru        *lru.LRUCache
 	cacheBytes int64 //lru的maxBytes
+	ttl        time.Duration
 }
 
 func (c *LRUcache) add(key string, value ByteView) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.lru == nil {
-		c.lru = lru.New(c.cacheBytes, nil)
+		c.lru = lru.New(c.cacheBytes, nil, c.ttl)
 	}
-	c.lru.Add(key, value)
+	c.lru.Add(key, value, c.ttl)
 }
 
 func (c *LRUcache) get(key string) (value ByteView, ok bool) {
@@ -48,15 +50,16 @@ type LFUcache struct {
 	mu         sync.Mutex
 	lfu        *lfu.LFUCache
 	cacheBytes int64 //lru的maxBytes
+	ttl        time.Duration
 }
 
 func (c *LFUcache) add(key string, value ByteView) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.lfu == nil {
-		c.lfu = lfu.New(c.cacheBytes, nil)
+		c.lfu = lfu.New(c.cacheBytes, nil, c.ttl)
 	}
-	c.lfu.Add(key, value)
+	c.lfu.Add(key, value, c.ttl)
 }
 
 func (c *LFUcache) get(key string) (value ByteView, ok bool) {

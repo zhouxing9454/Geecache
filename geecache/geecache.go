@@ -7,6 +7,7 @@ import (
 	"log"
 	"math/rand"
 	"sync"
+	"time"
 )
 
 type Getter interface {
@@ -46,11 +47,11 @@ func NewGroup(name string, cacheBytes int64, CacheType string, getter Getter) *G
 	}
 	switch CacheType { //根据淘汰算法，实例化mainCache
 	case "lru":
-		g.mainCache = &LRUcache{cacheBytes: cacheBytes}
-		g.hotCache = &LRUcache{cacheBytes: cacheBytes / 8}
+		g.mainCache = &LRUcache{cacheBytes: cacheBytes, ttl: time.Second * 10}
+		g.hotCache = &LRUcache{cacheBytes: cacheBytes / 8, ttl: time.Second * 10}
 	case "lfu":
-		g.mainCache = &LFUcache{cacheBytes: cacheBytes}
-		g.hotCache = &LFUcache{cacheBytes: cacheBytes / 8}
+		g.mainCache = &LFUcache{cacheBytes: cacheBytes, ttl: time.Second * 10}
+		g.hotCache = &LFUcache{cacheBytes: cacheBytes / 8, ttl: time.Second * 10}
 	default:
 		panic("Please select the correct algorithm!")
 	}
