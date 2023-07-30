@@ -58,9 +58,9 @@ func main() {
 
 	apiAddr := "http://localhost:9999"
 	addrMap := map[int]string{
-		8001: ":8001",
-		8002: ":8002",
-		8003: ":8003",
+		8001: "127.0.0.1:8001",
+		8002: "127.0.0.1:8002",
+		8003: "127.0.0.1:8003",
 	} //grpc版本
 	/*http版本要是这样
 	addrMap := map[int]string{
