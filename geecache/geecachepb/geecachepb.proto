@@ -29,3 +29,4 @@ option go_package = "geecache/geecachepb";
 //具体来说，go_package 选项中的值 "geecache/geecachepb" 表示生成的 Go 代码将被放置在 geecache/geecachepb 包中
 
 //命令：protoc --go_out=. geecache/geecachepb/geecachepb.proto
+// protoc --go-grpc_out=. geecache/geecachepb/geecachepb.proto

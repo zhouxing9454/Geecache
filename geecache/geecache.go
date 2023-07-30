@@ -5,8 +5,9 @@ import (
 	"Geecache/geecache/singleflight"
 	"fmt"
 	"log"
-	"math/rand"
+	"math"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -21,17 +22,34 @@ func (f GetterFunc) Get(key string) ([]byte, error) { //函数类型实现某一
 }
 
 type Group struct {
-	name      string              //缓存组的名称。
-	getter    Getter              //实现了 Getter 接口的对象（回调），从数据源用于获取缓存数据。
-	mainCache BaseCache           // 主缓存，是一个 cache 类型的实例，用于存储缓存数据。——修改为BaseCache,一个缓存接口
-	hotCache  BaseCache           //mainCache 用于存储本地节点作为主节点所拥有的数据，而 hotCache 则是为了存储热门数据的缓存。
-	peers     PeerPicker          //实现了 PeerPicker 接口的对象，用于根据键选择对等节点
-	loader    *singleflight.Group //确保相同的请求只被执行一次
+	name      string               //缓存组的名称。
+	getter    Getter               //实现了 Getter 接口的对象（回调），从数据源用于获取缓存数据。
+	mainCache BaseCache            // 主缓存，是一个 cache 类型的实例，用于存储缓存数据。——修改为BaseCache,一个缓存接口
+	hotCache  BaseCache            //mainCache 用于存储本地节点作为主节点所拥有的数据，而 hotCache 则是为了存储热门数据的缓存。
+	peers     PeerPicker           //实现了 PeerPicker 接口的对象，用于根据键选择对等节点
+	loader    *singleflight.Group  //确保相同的请求只被执行一次
+	keys      map[string]*KeyStats //根据key获取key的统计信息
 } //负责与用户的交互，并且控制缓存值存储和获取的流程。
 
+type AtomicInt int64 // 封装一个原子类
+
+func (i *AtomicInt) Add(n int64) { //原子自增
+	atomic.AddInt64((*int64)(i), n)
+}
+
+func (i *AtomicInt) Get() int64 {
+	return atomic.LoadInt64((*int64)(i))
+}
+
+type KeyStats struct { //Key的统计信息
+	firstGetTime time.Time //第一次请求的时间
+	remoteCnt    AtomicInt //请求的次数（利用atomic包封装的原子类）
+}
+
 var (
-	mu     sync.RWMutex
-	groups = make(map[string]*Group)
+	maxMinuteRemoteQPS = 10
+	mu                 sync.RWMutex
+	groups             = make(map[string]*Group)
 )
 
 func NewGroup(name string, cacheBytes int64, CacheType string, getter Getter) *Group { //增加CacheType,用来选择具体缓存淘汰算法
@@ -44,14 +62,15 @@ func NewGroup(name string, cacheBytes int64, CacheType string, getter Getter) *G
 		name:   name,
 		getter: getter,
 		loader: &singleflight.Group{},
+		keys:   map[string]*KeyStats{},
 	}
 	switch CacheType { //根据淘汰算法，实例化mainCache
 	case "lru":
-		g.mainCache = &LRUcache{cacheBytes: cacheBytes, ttl: time.Second * 10}
-		g.hotCache = &LRUcache{cacheBytes: cacheBytes / 8, ttl: time.Second * 10}
+		g.mainCache = &LRUcache{cacheBytes: cacheBytes, ttl: time.Second * 60}
+		g.hotCache = &LRUcache{cacheBytes: cacheBytes / 8, ttl: time.Second * 60}
 	case "lfu":
-		g.mainCache = &LFUcache{cacheBytes: cacheBytes, ttl: time.Second * 10}
-		g.hotCache = &LFUcache{cacheBytes: cacheBytes / 8, ttl: time.Second * 10}
+		g.mainCache = &LFUcache{cacheBytes: cacheBytes, ttl: time.Second * 60}
+		g.hotCache = &LFUcache{cacheBytes: cacheBytes / 8, ttl: time.Second * 60}
 	default:
 		panic("Please select the correct algorithm!")
 	}
@@ -76,9 +95,6 @@ func (g *Group) Get(key string) (ByteView, error) {
 	}
 	if v, ok := g.mainCache.get(key); ok {
 		log.Println("[GeeCache] hit mainCache")
-		if rand.Intn(10) == 0 {
-			g.populateHotCache(key, v)
-		}
 		return v, nil
 	}
 	return g.load(key)
@@ -141,6 +157,27 @@ func (g *Group) getFromPeer(peer PeerGetter, key string) (ByteView, error) {
 	err := peer.Get(req, res)
 	if err != nil {
 		return ByteView{}, err
+	}
+	//远程获取cnt++
+	if stat, ok := g.keys[key]; ok {
+		stat.remoteCnt.Add(1)
+		//计算QPS
+		interval := float64(time.Now().Unix()-stat.firstGetTime.Unix()) / 60
+		qps := stat.remoteCnt.Get() / int64(math.Max(1, math.Round(interval)))
+		if qps >= int64(maxMinuteRemoteQPS) {
+			//存入hotCache
+			g.populateHotCache(key, ByteView{b: res.Value})
+			//删除映射关系,节省内存
+			mu.Lock()
+			delete(g.keys, key)
+			mu.Unlock()
+		}
+	} else {
+		//第一次获取
+		g.keys[key] = &KeyStats{
+			firstGetTime: time.Now(),
+			remoteCnt:    1,
+		}
 	}
 	return ByteView{b: res.Value}, nil
 } //实现了 PeerGetter 接口的 httpGetter 从访问远程节点，获取缓存值。

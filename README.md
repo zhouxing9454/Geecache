@@ -556,36 +556,70 @@ func createGroup() *geecache.Group {
 
 ```go
 type Group struct {
-	name      string              //缓存组的名称。
-	getter    Getter              //实现了 Getter 接口的对象（回调），从数据源用于获取缓存数据。
-	mainCache BaseCache           // 主缓存，是一个 cache 类型的实例，用于存储缓存数据。——修改为BaseCache,一个缓存接口
-	hotCache  BaseCache           //mainCache 用于存储本地节点作为主节点所拥有的数据，而 hotCache 则是为了存储热门数据的缓存。
-	peers     PeerPicker          //实现了 PeerPicker 接口的对象，用于根据键选择对等节点
-	loader    *singleflight.Group //确保相同的请求只被执行一次
+	name      string               //缓存组的名称。
+	getter    Getter               //实现了 Getter 接口的对象（回调），从数据源用于获取缓存数据。
+	mainCache BaseCache            // 主缓存，是一个 cache 类型的实例，用于存储缓存数据。——修改为BaseCache,一个缓存接口
+	hotCache  BaseCache            //mainCache 用于存储本地节点作为主节点所拥有的数据，而 hotCache 则是为了存储热门数据的缓存。
+	peers     PeerPicker           //实现了 PeerPicker 接口的对象，用于根据键选择对等节点
+	loader    *singleflight.Group  //确保相同的请求只被执行一次
+	keys      map[string]*KeyStats //根据key获取key的统计信息
 } //负责与用户的交互，并且控制缓存值存储和获取的流程。
 ```
 
-修改newgroup，hotCache的最大容量是mainCache的八分之一。然后修改get方法。
+同时加入一个keys，用来获取key的统计信息。
 
 ```go
-func (g *Group) Get(key string) (ByteView, error) {
-	if key == "" {
-		return ByteView{}, fmt.Errorf("key is required")
-	}
-	if v, ok := g.hotCache.get(key); ok {
-		log.Println("[GeeCache] hit hotCache")
-		return v, nil
-	}
-	if v, ok := g.mainCache.get(key); ok {
-		log.Println("[GeeCache] hit mainCache")
-		if rand.Intn(10) == 0 {
-			g.populateHotCache(key, v)
-		}
-		return v, nil
-	}
-	return g.load(key)
+type KeyStats struct { //Key的统计信息
+	firstGetTime time.Time //第一次请求的时间
+	remoteCnt    AtomicInt //请求的次数（利用atomic包封装的原子类）
 }
 ```
+
+实现原子自增
+
+```go
+type AtomicInt int64 // 封装一个原子类
+
+func (i *AtomicInt) Add(n int64) { //原子自增
+	atomic.AddInt64((*int64)(i), n)
+}
+
+func (i *AtomicInt) Get() int64 {
+	return atomic.LoadInt64((*int64)(i))
+}
+```
+
+定义maxMinuteRemoteQPS这个常量。然后修改getfrompeer
+
+```go
+func (g *Group) getFromPeer(peer PeerGetter, key string) (ByteView, error) {
+	//....
+	//远程获取cnt++
+	if stat, ok := g.keys[key]; ok {
+		stat.remoteCnt.Add(1)
+		//计算QPS
+		interval := float64(time.Now().Unix()-stat.firstGetTime.Unix()) / 60
+		qps := stat.remoteCnt.Get() / int64(math.Max(1, math.Round(interval)))
+		if qps >= int64(maxMinuteRemoteQPS) {
+			//存入hotCache
+			g.populateHotCache(key, ByteView{b: res.Value})
+			//删除映射关系,节省内存
+			mu.Lock()
+			delete(g.keys, key)
+			mu.Unlock()
+		}
+	} else {
+		//第一次获取
+		g.keys[key] = &KeyStats{
+			firstGetTime: time.Now(),
+			remoteCnt:    1,
+		}
+	}
+	//....
+}
+```
+
+
 
 
 
