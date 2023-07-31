@@ -400,44 +400,44 @@ service GroupCache {
 ```tex
 │  go.mod
 │  go.sum
-│  main.go							main函数,用于测试
-│  README.md					    MD文档
-│  run.bat	 						windows下测试
-│  run.sh	 						Linux下测试
+│  main.go	main函数,用于测试
+│  README.md	MD文档
+│  run.bat	windows下测试
+│  run.sh	Linux下测试
 │
 └─geecache
-    │  byteview.go 					缓存值的抽象与封装
-    │  cache.go 					并发控制
-    │  geecache.go  				负责与外部交互，控制缓存存储和获取的主流程
+    │  byteview.go	缓存值的抽象与封装
+    │  cache.go	并发控制
+    │  geecache.go	负责与外部交互，控制缓存存储和获取的主流程
     │  geecache_test.go 			
-    │  http.go					    节点间 HTTP 通信
-    │  peers.go 					抽象 PeerPicker
-    │  grpc.go						没有ETCD
-    │  grpc2.go						有ETCD
+    │  http.go	节点间 HTTP 通信
+    │  peers.go	抽象 PeerPicker
+    │  grpc.go	没有ETCD
+    │  grpc2.go	有ETCD
     │
     ├─consistenthash
-    │      consistenthash.go		一致性哈希算法
+    │      consistenthash.go	一致性哈希算法
     │      consistenthash_test.go	
     │
     ├─geecachepb
     │      geecachepb.pb.go
-    │      geecachepb.proto 		protobuf文件
+    │      geecachepb.proto	protobuf文件
     │      geecachepb_grpc.pb.go
     │
     ├─lfu
-    │      lfu.go					LFU算法
+    │      lfu.go	LFU算法
     │      lfu_test.go
     │
     ├─lru
-    │      lru.go					LRU算法
+    │      lru.go	LRU算法
     │      lru_test.go
     │
     ├─registry	
-    │      discover.go				服务发现
-    │      register.go				服务注册
+    │      discover.go	服务发现
+    │      register.go	服务注册
     │
     └─singleflight
-            singleflight.go			防止缓存击穿
+            singleflight.go	防止缓存击穿
             singleflight_test.go
 ```
 
