@@ -61,7 +61,7 @@ func main() {
 		8001: "127.0.0.1:8001",
 		8002: "127.0.0.1:8002",
 		8003: "127.0.0.1:8003",
-	} //grpc版本
+	} //grpc版本（是否含etcd都一样）
 	/*http版本要是这样
 	addrMap := map[int]string{
 		8001: "http://localhost:8001",
@@ -76,12 +76,23 @@ func main() {
 	if api {
 		go startAPIServer(apiAddr, gee)
 	}
-	startCacheServerGrpc(addrMap[port], addrs, gee) //grpc版本
+	startCacheServerGrpcEtcd(addrMap[port], addrs, gee) //grpc版本
 }
 
 //startCacheServer() 用来启动缓存服务器：创建 HTTPPool，添加节点信息，注册到 gee 中，启动 HTTP 服务（共3个端口，8001/8002/8003），用户不感知。
 //startAPIServer() 用来启动一个 API 服务（端口 9999），与用户进行交互，用户感知。
 //main() 函数需要命令行传入 port 和 api 2 个参数，用来在指定端口启动 HTTP 服务。
+
+func startCacheServerGrpcEtcd(addr string, addrs []string, gee *geecache.Group) {
+	peers, _ := geecache.NewServer(addr)
+	peers.Set(addrs...)
+	gee.RegisterPeers(peers)
+	log.Println("geecache is running at ", addr)
+	err := peers.Start()
+	if err != nil {
+		peers.Stop()
+	}
+}
 
 func startCacheServerGrpc(addr string, addrs []string, gee *geecache.Group) {
 	peers := geecache.NewGrpcPool(addr)
