@@ -21,3 +21,7 @@ func EtcdDial(c *clientv3.Client, service string) (*grpc.ClientConn, error) {
 		grpc.WithBlock(),
 	)
 }
+
+//用于通过gRPC与Etcd建立连接。它通过提供Etcd服务的名称，借助Etcd解析器将其解析为实际的网络地址。
+//然后，使用不安全的传输凭据建立连接，并在连接建立之前进行阻塞。
+//最终，函数返回一个指向已建立连接的grpc.ClientConn类型的指针，或者在发生错误时返回一个错误

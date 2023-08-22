@@ -49,7 +49,7 @@ func NewServer(self string) (*Server, error) {
 	}, nil
 }
 
-// Get 实现PeanutCache service的Get接口
+// Get 实现Cache service的Get接口
 func (s *Server) Get(ctx context.Context, in *pb.Request) (*pb.Response, error) {
 	group, key := in.Group, in.Key
 	resp := &pb.Response{}
