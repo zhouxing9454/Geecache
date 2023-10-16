@@ -8,12 +8,15 @@ import (
 	"net/http"
 )
 
+// db 是伪造的数据源
 var db = map[string]string{
 	"Tom":  "630",
 	"Jack": "589",
 	"Sam":  "567",
 }
 
+// createGroup 创建并返回一个 geecache 的缓存组（Group 实例）。
+// 该组使用 LRU 策略，并且有一个 Getter 函数，用于从 db 字典中获取数据。
 func createGroup() *geecache.Group {
 	return geecache.NewGroup("scores", 2<<10, "lru", geecache.GetterFunc( //lru算法做测试
 		func(key string) ([]byte, error) {
@@ -25,6 +28,7 @@ func createGroup() *geecache.Group {
 		}))
 }
 
+// startAPIServer 启动一个 API 服务器，用于与用户进行交互。用户可以通过访问 /api?key=XXX 的形式来获取缓存数据。
 func startAPIServer(apiAddr string, gee *geecache.Group) {
 	http.Handle("/api", http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
@@ -34,7 +38,7 @@ func startAPIServer(apiAddr string, gee *geecache.Group) {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Header().Set("Content-Type", "application/octet-stream") //二进制数据流媒体类型
 			w.Write(view.ByteSlice())
 		}))
 	log.Println("geecache is running at", apiAddr)
@@ -65,9 +69,11 @@ func main() {
 	startCacheServerGrpcEtcd(addrMap[port], addrs, gee) //grpc版本
 }
 
-// startCacheServer() 用来启动缓存服务器：创建 HTTPPool，添加节点信息，注册到 gee 中，启动 HTTP 服务（共3个端口，8001/8002/8003），用户不感知。
-// startAPIServer() 用来启动一个 API 服务（端口 9999），与用户进行交互，用户感知。
-// main() 函数需要命令行传入 port 和 api 2 个参数，用来在指定端口启动 HTTP 服务。
+// startCacheServerGrpcEtcd 函数：
+// 创建一个 geecache.Server 实例，该实例用于处理 gRPC 请求并与其他节点通信。
+// 通过 geecache.Server 实例的 Set 方法设置一组节点地址。
+// 将 geecache.Server 实例注册到缓存组（gee）中。
+// 启动 geecache.Server 实例，开始处理 gRPC 请求。
 func startCacheServerGrpcEtcd(addr string, addrs []string, gee *geecache.Group) {
 	peers, _ := geecache.NewServer(addr)
 	peers.Set(addrs...)
