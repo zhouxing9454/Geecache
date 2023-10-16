@@ -141,7 +141,7 @@ func (c *LFUCache) Len() int {
 	return len(c.cache)
 }
 
-// RemoveElement 函数删除传入的缓存项。
+// removeElement 函数删除传入的缓存项。
 func (c *LFUCache) removeElement(e *entry) {
 	heap.Remove(c.heap, e.index)
 	delete(c.cache, e.key)

@@ -24,19 +24,21 @@ func (f GetterFunc) Get(key string) ([]byte, error) { //函数类型实现某一
 type Group struct {
 	name      string               //缓存组的名称。
 	getter    Getter               //实现了 Getter 接口的对象（回调），从数据源用于获取缓存数据。
-	mainCache BaseCache            // 主缓存，是一个 cache 类型的实例，用于存储缓存数据。——修改为BaseCache,一个缓存接口
-	hotCache  BaseCache            //mainCache 用于存储本地节点作为主节点所拥有的数据，而 hotCache 则是为了存储热门数据的缓存。
-	peers     PeerPicker           //实现了 PeerPicker 接口的对象，用于根据键选择对等节点
+	mainCache BaseCache            // 主缓存，是一个 BaseCache 接口的实例，用于存储本地节点作为主节点所拥有的数据。
+	hotCache  BaseCache            // hotCache 则是为了存储热门数据的缓存。
+	peers     PeerPicker           //实现了 PeerPicker 接口的对象，用于根据键选择相应的缓存节点
 	loader    *singleflight.Group  //确保相同的请求只被执行一次
-	keys      map[string]*KeyStats //根据key获取key的统计信息
+	keys      map[string]*KeyStats //根据键key获取对应key的统计信息
 } //负责与用户的交互，并且控制缓存值存储和获取的流程。
 
-type AtomicInt int64 // 封装一个原子类
+type AtomicInt int64 // 封装一个原子类，用于进行原子操作，保证并发安全.
 
+// Add 方法用于对 AtomicInt 中的值进行原子自增
 func (i *AtomicInt) Add(n int64) { //原子自增
 	atomic.AddInt64((*int64)(i), n)
 }
 
+// Get 方法用于获取 AtomicInt 中的值。
 func (i *AtomicInt) Get() int64 {
 	return atomic.LoadInt64((*int64)(i))
 }
@@ -47,11 +49,12 @@ type KeyStats struct { //Key的统计信息
 }
 
 var (
-	maxMinuteRemoteQPS = 10
-	mu                 sync.RWMutex
-	groups             = make(map[string]*Group)
+	maxMinuteRemoteQPS = 10                      //最大QPS
+	mu                 sync.RWMutex              //读写锁
+	groups             = make(map[string]*Group) //map,根据键缓存组的名字，获取对应的缓存组
 )
 
+// NewGroup 函数传入name,acheBytes,CacheType,getter,获取缓存组Group
 func NewGroup(name string, cacheBytes int64, CacheType string, getter Getter) *Group { //增加CacheType,用来选择具体缓存淘汰算法
 	if getter == nil {
 		panic("nil Getter")
@@ -64,7 +67,7 @@ func NewGroup(name string, cacheBytes int64, CacheType string, getter Getter) *G
 		loader: &singleflight.Group{},
 		keys:   map[string]*KeyStats{},
 	}
-	switch CacheType { //根据淘汰算法，实例化mainCache
+	switch CacheType { //根据淘汰算法，实例化mainCache,hotCache
 	case "lru":
 		g.mainCache = &LRUcache{cacheBytes: cacheBytes, ttl: time.Second * 60}
 		g.hotCache = &LRUcache{cacheBytes: cacheBytes / 8, ttl: time.Second * 60}
@@ -78,6 +81,7 @@ func NewGroup(name string, cacheBytes int64, CacheType string, getter Getter) *G
 	return g
 }
 
+// GetGroup 根据name获取对应的Group
 func GetGroup(name string) *Group {
 	mu.RLock() //只读
 	g := groups[name]
@@ -85,6 +89,7 @@ func GetGroup(name string) *Group {
 	return g
 }
 
+// Get 函数用于获取缓存数据，获取顺序为：热点缓存、主缓存、数据源
 func (g *Group) Get(key string) (ByteView, error) {
 	if key == "" {
 		return ByteView{}, fmt.Errorf("key is required")
@@ -100,24 +105,26 @@ func (g *Group) Get(key string) (ByteView, error) {
 	return g.load(key)
 }
 
+// load 方法的逻辑是首先尝试从远程节点获取数据，如果失败或者没有配置远程节点，则回退到本地获取。
 func (g *Group) load(key string) (value ByteView, err error) {
-	viewi, err := g.loader.Do(key, func() (interface{}, error) {
+	viewi, err := g.loader.Do(key, func() (interface{}, error) { //singleFlight原理，相同请求只执行一次
 		if g.peers != nil {
-			if peer, ok := g.peers.PickPeer(key); ok {
-				if value, err = g.getFromPeer(peer, key); err == nil {
+			if peer, ok := g.peers.PickPeer(key); ok { //根据key选择远程节点
+				if value, err = g.getFromPeer(peer, key); err == nil { //从远程节点获取数据
 					return value, nil
 				}
 				log.Println("[GeeCache] Failed to get from peer", err)
 			}
 		}
-		return g.getLocally(key)
+		return g.getLocally(key) //从本地获取缓存数据
 	})
 	if err == nil {
 		return viewi.(ByteView), nil
 	}
 	return
-} //使用 PickPeer() 方法选择节点，若非本机节点，则调用 getFromPeer() 从远程获取。若是本机节点或失败，则回退到 getLocally()。
+}
 
+// getLocally 从数据源获取数据，然后将数据添加到mainCache中
 func (g *Group) getLocally(key string) (ByteView, error) {
 	bytes, err := g.getter.Get(key)
 	if err != nil {
@@ -128,10 +135,12 @@ func (g *Group) getLocally(key string) (ByteView, error) {
 	return value, nil
 }
 
+// populateCache 将数据添加到mainCache中
 func (g *Group) populateCache(key string, value ByteView) {
 	g.mainCache.add(key, value)
 }
 
+// populateHotCache 将数据添加到hotCache中
 func (g *Group) populateHotCache(key string, value ByteView) {
 	if g.hotCache != nil {
 		// Add the data to hotCache
@@ -144,10 +153,11 @@ func (g *Group) RegisterPeers(peers PeerPicker) {
 		panic("RegisterPeerPicker called more than once")
 	}
 	g.peers = peers
-} //将实现了 PeerPicker 接口的 HTTPPool 注入到 Group 中，
+} //将实现了 PeerPicker 接口的 Server 注入到 Group 中，
 // 调用 RegisterPeers 函数，我们可以将实现了 PeerPicker 接口的对象注册到 Group 结构体中。
 //这样，在分布式缓存系统的运行过程中，当需要根据键选择远程节点时，可以通过调用 g.peers.PickPeer(key) 来获取合适的远程节点的 PeerGetter 对象。
 
+// getFromPeer 实现了 PeerGetter 接口的 Client 从访问远程节点，获取缓存值。
 func (g *Group) getFromPeer(peer PeerGetter, key string) (ByteView, error) {
 	req := &pb.Request{
 		Group: g.name,
@@ -180,4 +190,4 @@ func (g *Group) getFromPeer(peer PeerGetter, key string) (ByteView, error) {
 		}
 	}
 	return ByteView{b: res.Value}, nil
-} //实现了 PeerGetter 接口的 httpGetter 从访问远程节点，获取缓存值。
+}
