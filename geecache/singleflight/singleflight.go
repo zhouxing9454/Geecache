@@ -36,4 +36,6 @@ func (g *Group) Do(key string, fn func() (interface{}, error)) (interface{}, err
 	g.mu.Unlock()
 
 	return c.val, c.err // 返回结果
-}
+} //实现了singleFlight原理：在多个并发请求触发的回调操作里，只有第⼀个回调方法被执行，
+// 其余请求（落在第⼀个回调方法执行的时间窗口里）阻塞等待第⼀个回调函数执行完成后直接取结果，
+//以此保证同⼀时刻只有⼀个回调方法执行，达到防止缓存击穿的目的。
