@@ -1,32 +1,39 @@
-syntax="proto3";
+syntax="proto3"; //syntax="proto3";：指定使用的 Protocol Buffers 版本为 proto3。
 
-package geecachepb;
+package geecachepb;//package geecachepb;：指定生成的代码所属的包名为 geecachepb。
 
+/*
+message Request：定义了一个名为 Request 的消息类型，用于向缓存服务发送请求。它包含以下字段：
+string group=1;：表示缓存组的名称，使用字段标签 1。
+string key=2;：表示要获取的缓存键，使用字段标签 2。
+*/
 message Request{
   string group=1;
   string key=2;
 }
 
+/*
+message Response：定义了一个名为 Response 的消息类型，用于从缓存服务接收响应。它包含以下字段：
+bytes value=1;：表示返回的缓存值，使用字段标签 1。
+*/
 message Response{
   bytes value=1;
 }
 
+/*
+service GroupCache：定义了一个名为 GroupCache 的服务，该服务提供了一种名为 Get 的远程过程调用（RPC）方法，用于从缓存中获取数据。具体解释如下：
+rpc Get(Request) returns (Response);：定义了一个 Get 方法，它接受一个名为 Request 的请求消息，并返回一个名为 Response 的响应消息。
+*/
 service GroupCache{
   rpc Get(Request) returns (Response);
 }
 
+/*
+option go_package = "geecache/geecachepb"; 是在 Protocol Buffers 的 .proto 文件中添加的选项，用于指定生成的 Go 代码所属的包路径。
+具体来说，go_package 选项中的值 "geecache/geecachepb" 表示生成的 Go 代码将被放置在 geecache/geecachepb 包中
+*/
 option go_package = "geecache/geecachepb";
-//syntax="proto3";：指定使用的 Protocol Buffers 版本为 proto3。
-//package geecachepb;：指定生成的代码所属的包名为 geecachepb。
-//message Request：定义了一个名为 Request 的消息类型，用于向缓存服务发送请求。它包含以下字段：
-//string group=1;：表示缓存组的名称，使用字段标签 1。
-//string key=2;：表示要获取的缓存键，使用字段标签 2。
-//message Response：定义了一个名为 Response 的消息类型，用于从缓存服务接收响应。它包含以下字段：
-//bytes value=1;：表示返回的缓存值，使用字段标签 1。
-//service GroupCache：定义了一个名为 GroupCache 的服务，该服务提供了一种名为 Get 的远程过程调用（RPC）方法，用于从缓存中获取数据。具体解释如下：
-//rpc Get(Request) returns (Response);：定义了一个 Get 方法，它接受一个名为 Request 的请求消息，并返回一个名为 Response 的响应消息。
-//option go_package = "geecache/geecachepb"; 是在 Protocol Buffers 的 .proto 文件中添加的选项，用于指定生成的 Go 代码所属的包路径。
-//具体来说，go_package 选项中的值 "geecache/geecachepb" 表示生成的 Go 代码将被放置在 geecache/geecachepb 包中
 
-//命令：protoc --go_out=. geecache/geecachepb/geecachepb.proto
+//命令：
+// protoc --go_out=. geecache/geecachepb/geecachepb.proto
 // protoc --go-grpc_out=. geecache/geecachepb/geecachepb.proto
