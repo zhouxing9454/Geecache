@@ -14,10 +14,10 @@ func (v ByteView) ByteSlice() []byte {
 
 func (v ByteView) String() string {
 	return string(v.b)
-}
+} //返回string类型的缓存值
 
 func cloneBytes(b []byte) []byte {
 	c := make([]byte, len(b))
 	copy(c, b)
 	return c
-}
+} //cloneBytes 用于创建并返回一个输入字节切片（[]byte）的副本。
