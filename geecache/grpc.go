@@ -214,3 +214,10 @@ func NewClient(service string) *Client {
 
 // 测试 Client 是否实现了 PeerGetter 接口
 var _ PeerGetter = (*Client)(nil)
+
+/*
+如何理解这个Server和Client。
+比如,我8003端口pick远程节点是8001端口，
+那么8003端口的Client就会发送grpc请求给8001端口，
+8001端口的Server就会处理8003端口发过来的grpc请求。
+*/

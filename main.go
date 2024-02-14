@@ -84,3 +84,15 @@ func startCacheServerGrpcEtcd(addr string, addrs []string, gee *geecache.Group) 
 		peers.Stop()
 	}
 }
+
+/*
+用户通过 API 服务器（例如 http://localhost:9999）访问 /api?key=XXX 的形式来获取缓存数据。
+API 服务器会调用对应缓存组的 Get 方法。
+Get 方法首先尝试从本地缓存中的热点缓存（hotCache）中查找数据。
+如果数据不在热点缓存中，它将尝试从主缓存（mainCache）中查找数据。
+如果主缓存中也没有数据，缓存系统将选择一个远程节点（可能是本地节点，也可能是其他节点）。
+如果选中的远程节点是本地节点，缓存系统会直接从数据源获取数据。
+如果选中的远程节点不是本地节点，API 服务器将发送 gRPC 请求给对应的远程节点，要求其提供数据。
+
+注意：节点刚开始都会注册到etcd。
+*/
