@@ -60,7 +60,7 @@ func (c *LRUCache) Get(key string) (value Value, ok bool) {
 	return
 }
 
-// RemoveOldest 函数找到醉酒未使用且已过期的缓存项，然后将其从缓存中移除。
+// RemoveOldest 函数找到最久未使用且已过期的缓存项，然后将其从缓存中移除。
 func (c *LRUCache) RemoveOldest() {
 	for e := c.ll.Back(); e != nil; e = e.Prev() {
 		kv := e.Value.(*entry)
