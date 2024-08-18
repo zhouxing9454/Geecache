@@ -61,3 +61,8 @@
 4. 增加了grpc进行通信
 5. 使用etcd做服务注册和服务发现
 
+
+
+
+
+![202308222129814.png](https://blog-1314857283.cos.ap-shanghai.myqcloud.com/images/202310232253486.png)
