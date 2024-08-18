@@ -3,6 +3,7 @@ package lru
 import (
 	"container/list"
 	"log"
+	"math/rand"
 	"time"
 )
 
@@ -75,23 +76,27 @@ func (c *LRUCache) RemoveOldest() {
 // 如果键不存在，则在链表头部插入新的节点，并更新已占用的容量。
 // 如果添加新的键值对后超出了最大存储容量，则会连续移除最久未使用的记录，直到满足容量要求。
 func (c *LRUCache) Add(key string, value Value, ttl time.Duration) {
+	expireTime := time.Now().Add(ttl + time.Duration(rand.Intn(60))*time.Second)
 	if ele, ok := c.cache[key]; ok {
 		c.ll.MoveToFront(ele)
 		kv := ele.Value.(*entry)
 		c.nBytes += int64(value.Len()) - int64(kv.value.Len())
 		kv.value = value
 		// 更新过期时间时，判断是否应该保留原本的过期时间
-		if kv.expire.Before(time.Now().Add(ttl)) {
-			kv.expire = time.Now().Add(ttl)
+		if kv.expire.Before(expireTime) {
+			kv.expire = expireTime
 		}
 	} else {
-		ele = c.ll.PushFront(&entry{key: key, value: value, expire: time.Now().Add(ttl)})
+		ele = c.ll.PushFront(&entry{key: key, value: value, expire: expireTime})
 		c.cache[key] = ele
 		c.nBytes += int64(len(key)) + int64(value.Len())
 	}
 	for c.maxBytes != 0 && c.maxBytes < c.nBytes {
 		c.RemoveOldest()
 	}
+	// 如果 maxBytes 的值为 0，表示没有限制缓存的总大小，即不限制缓存的内存使用量。
+	//在这种情况下，不需要执行缓存大小控制的相关逻辑，可以直接添加或更新缓存项。
+	//因此，不需要在 Add 方法中执行删除最旧的缓存项 (RemoveOldest) 的操作。
 }
 
 // Len 方法返回当前缓存中的记录数量。

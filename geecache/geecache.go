@@ -107,7 +107,7 @@ func (g *Group) Get(key string) (ByteView, error) {
 
 // load 方法的逻辑是首先尝试从远程节点获取数据，如果失败或者没有配置远程节点，则回退到本地获取。
 func (g *Group) load(key string) (value ByteView, err error) {
-	viewi, err := g.loader.Do(key, func() (interface{}, error) { //singleFlight原理，相同请求只执行一次
+	view, err := g.loader.Do(key, func() (interface{}, error) { //singleFlight原理，相同请求只执行一次
 		if g.peers != nil {
 			if peer, ok := g.peers.PickPeer(key); ok { //根据key选择远程节点
 				if value, err = g.getFromPeer(peer, key); err == nil { //从远程节点获取数据
@@ -119,7 +119,7 @@ func (g *Group) load(key string) (value ByteView, err error) {
 		return g.getLocally(key) //从本地获取缓存数据
 	})
 	if err == nil {
-		return viewi.(ByteView), nil
+		return view.(ByteView), nil
 	}
 	return
 }
@@ -142,10 +142,7 @@ func (g *Group) populateCache(key string, value ByteView) {
 
 // populateHotCache 将数据添加到hotCache中
 func (g *Group) populateHotCache(key string, value ByteView) {
-	if g.hotCache != nil {
-		// Add the data to hotCache
-		g.hotCache.add(key, value)
-	}
+	g.hotCache.add(key, value)
 }
 
 func (g *Group) RegisterPeers(peers PeerPicker) {

@@ -41,7 +41,7 @@ func startAPIServer(apiAddr string, gee *geecache.Group) {
 			w.Header().Set("Content-Type", "application/octet-stream") //二进制数据流媒体类型
 			w.Write(view.ByteSlice())
 		}))
-	log.Println("geecache is running at", apiAddr)
+	log.Println("geecache api is running at", apiAddr)
 	log.Fatal(http.ListenAndServe(apiAddr[7:], nil))
 }
 
