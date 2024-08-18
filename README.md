@@ -65,4 +65,4 @@
 
 
 
-![202308222129814.png](https://blog-1314857283.cos.ap-shanghai.myqcloud.com/images/202310232253486.png)
+[项目GeeCache面试题(个人版，可能不够全面)](https://zhouxing9454.github.io/2023/10/23/项目GeeCache面试题/)
